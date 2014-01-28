@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
 
 import net.jodah.lyra.ConnectionOptions;
 import net.jodah.lyra.config.Config;
@@ -82,7 +83,7 @@ public class ConnectionHandler extends RetryableResource implements InvocationHa
     public void shutdownCompleted(ShutdownSignalException e) {
       connectionShutdown();
       if (!e.isInitiatedByApplication()) {
-        log.error("Connection {} was closed unexpectedly", ConnectionHandler.this);
+    	  log.severe("Connection "+ ConnectionHandler.this +" was closed unexpectedly");
         if (canRecover())
           RECOVERY_EXECUTORS.execute(new Runnable() {
             @Override
@@ -92,7 +93,7 @@ public class ConnectionHandler extends RetryableResource implements InvocationHa
               } catch (Exception e) {
                 // Only fail on non-closures since closures will trigger a new recovery
                 if (!Exceptions.isCausedByConnectionClosure(e)) {
-                  log.error("Failed to recover connection {}", ConnectionHandler.this, e);
+					log.log(Level.SEVERE, "Failed to recover connection "+ ConnectionHandler.this, e);
                   connectionClosed();
                   interruptWaiters();
                   for (ConnectionListener listener : config.getConnectionListeners())
@@ -122,7 +123,7 @@ public class ConnectionHandler extends RetryableResource implements InvocationHa
         } catch (Exception ignore) {
         }
     } catch (IOException e) {
-      log.error("Failed to create connection {}", connectionName, e);
+		log.log(Level.SEVERE, "Failed to create connection "+ connectionName, e);
       connectionClosed();
       for (ConnectionListener listener : config.getConnectionListeners())
         try {
@@ -147,10 +148,10 @@ public class ConnectionHandler extends RetryableResource implements InvocationHa
             ChannelHandler channelHandler = new ChannelHandler(ConnectionHandler.this, channel,
                 new Config(config));
             Channel channelProxy = (Channel) Proxy.newProxyInstance(
-                Connection.class.getClassLoader(), CHANNEL_TYPES, channelHandler);
+            		CHANNEL_TYPES[0].getClassLoader(), CHANNEL_TYPES, channelHandler);
             channelHandler.proxy = channelProxy;
             channels.put(Integer.valueOf(channel.getChannelNumber()).toString(), channelHandler);
-            log.info("Created {}", channelHandler);
+            log.info("Created "+ channelHandler);
             for (ChannelListener listener : config.getChannelListeners())
               try {
                 listener.onCreate(channelProxy);
@@ -171,7 +172,7 @@ public class ConnectionHandler extends RetryableResource implements InvocationHa
       }, config.getConnectionRetryPolicy(), null, canRecover(), true);
     } catch (Throwable t) {
       if ("createChannel".equals(method.getName())) {
-        log.error("Failed to create channel on {}", connectionName, t);
+			log.log(Level.SEVERE, "Failed to create channel on "+ connectionName, t);
         for (ChannelListener listener : config.getChannelListeners())
           try {
             listener.onCreateFailure(t);
@@ -227,16 +228,14 @@ public class ConnectionHandler extends RetryableResource implements InvocationHa
       delegate = callWithRetries(new Callable<Connection>() {
         @Override
         public Connection call() throws IOException {
-          log.info("{} connection {} to {}", recovery ? "Recovering" : "Creating", connectionName,
-              options.getAddresses());
+			log.info((recovery ? "Recovering" : "Creating") +" connection "+ connectionName +" to "+ options.getAddresses());
           ConnectionFactory cxnFactory = options.getConnectionFactory();
           Connection connection = cxnFactory.newConnection(consumerThreadPool,
               options.getAddresses());
           final String amqpAddress = String.format("amqp://%s:%s/%s", connection.getAddress()
               .getHostAddress(), connection.getPort(), "/".equals(cxnFactory.getVirtualHost()) ? ""
               : cxnFactory.getVirtualHost());
-          log.info("{} connection {} to {}", recovery ? "Recovered" : "Created", connectionName,
-              amqpAddress);
+			log.info((recovery ? "Recovered" : "Created") +" connection "+ connectionName +" to "+ amqpAddress);
           return connection;
         }
       }, recurringPolicy, recurringStats, true, false);

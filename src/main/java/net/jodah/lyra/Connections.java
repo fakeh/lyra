@@ -64,7 +64,7 @@ public final class Connections {
     Assert.notNull(config, "config");
     ConnectionHandler handler = new ConnectionHandler(options.copy(), new Config(config));
     ConfigurableConnection proxy = (ConfigurableConnection) Proxy.newProxyInstance(
-        Connection.class.getClassLoader(), CONNECTION_TYPES, handler);
+    		CONNECTION_TYPES[0].getClassLoader(), CONNECTION_TYPES, handler);
     handler.createConnection(proxy);
     return proxy;
   }
