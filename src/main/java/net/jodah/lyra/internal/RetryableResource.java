@@ -1,20 +1,18 @@
 package net.jodah.lyra.internal;
 
-import static net.jodah.lyra.internal.util.Exceptions.extractCause;
-import static net.jodah.lyra.internal.util.Exceptions.isRetryable;
+import static net.jodah.lyra.internal.util.Exceptions.*;
 
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import net.jodah.lyra.internal.util.Collections;
 import net.jodah.lyra.internal.util.Reflection;
 import net.jodah.lyra.internal.util.concurrent.InterruptableWaiter;
 import net.jodah.lyra.internal.util.concurrent.ReentrantCircuit;
 import net.jodah.lyra.util.Duration;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.rabbitmq.client.ShutdownListener;
 import com.rabbitmq.client.ShutdownSignalException;
@@ -25,7 +23,7 @@ import com.rabbitmq.client.ShutdownSignalException;
  * @author Jonathan Halterman
  */
 abstract class RetryableResource {
-  final Logger log = LoggerFactory.getLogger(getClass());
+  final Logger log = Logger.getLogger(getClass().getCanonicalName());
   final ReentrantCircuit circuit = new ReentrantCircuit();
   final InterruptableWaiter retryWaiter = new InterruptableWaiter();
   final List<ShutdownListener> shutdownListeners = Collections.synchronizedList();
@@ -48,7 +46,7 @@ abstract class RetryableResource {
         ShutdownSignalException sse = extractCause(e, ShutdownSignalException.class);
         if (sse == null && logFailures && recurringPolicy != null
             && recurringPolicy.allowsAttempts())
-          log.error("Invocation of {} failed.", callable, e);
+            log.log(Level.SEVERE, "Invocation of "+ callable +" failed.", e);
 
         if (sse != null && (recovery || !recoverable))
           throw e;
@@ -66,7 +64,7 @@ abstract class RetryableResource {
                 if (recurringPolicy.getMaxDuration() == null)
                   circuit.await();
                 else if (!circuit.await(retryStats.getMaxWaitTime())) {
-                  log.debug("Exceeded max wait time while waiting for {} to recover", this);
+                    log.fine("Exceeded max wait time while waiting for "+ this +" to recover");
                   throw e;
                 }
               }

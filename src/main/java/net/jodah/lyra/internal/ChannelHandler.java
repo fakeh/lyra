@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
 
 import net.jodah.lyra.config.ChannelConfig;
 import net.jodah.lyra.config.Config;
@@ -78,7 +79,7 @@ public class ChannelHandler extends RetryableResource implements InvocationHandl
     public void shutdownCompleted(ShutdownSignalException e) {
       channelShutdown();
       if (!e.isInitiatedByApplication()) {
-        log.error("Channel {} was closed unexpectedly", ChannelHandler.this);
+          log.severe("Channel "+ ChannelHandler.this +" was closed unexpectedly");
         lastShutdownSignal = e;
         if (!Exceptions.isConnectionClosure(e) && canRecover())
           ConnectionHandler.RECOVERY_EXECUTORS.execute(new Runnable() {
@@ -216,11 +217,11 @@ public class ChannelHandler extends RetryableResource implements InvocationHandl
       delegate = callWithRetries(new Callable<Channel>() {
         @Override
         public Channel call() throws Exception {
-          log.info("Recovering {}", ChannelHandler.this);
+          log.info("Recovering "+ ChannelHandler.this);
           previousMaxDeliveryTag = maxDeliveryTag;
           Channel channel = connectionHandler.createChannel(delegate.getChannelNumber());
           migrateConfiguration(channel);
-          log.info("Recovered {}", ChannelHandler.this);
+          log.info("Recovered "+ ChannelHandler.this);
           return channel;
         }
       }, config.getChannelRecoveryPolicy(), recoveryStats, true, false);
@@ -267,8 +268,8 @@ public class ChannelHandler extends RetryableResource implements InvocationHandl
       if (queueDeclaration != null)
         queueName = queueDeclaration.name;
       consumerDeclarations.put(consumerTag, new ConsumerDeclaration(queueDeclaration, method, args));
-      log.info("".equals(queueName) ? "Created consumer-{}{} via {}"
-          : "Created consumer-{} of {} via {}", consumerTag, queueName, this);
+      log.info("".equals(queueName) ? "Created consumer-"+ consumerTag +" via " + this
+          : "Created consumer-"+ consumerTag +" of "+ queueName +" via "+ this);
       return consumerTag;
     } else
       return (String) Reflection.invoke(delegate, method, args);
@@ -418,14 +419,14 @@ public class ChannelHandler extends RetryableResource implements InvocationHandl
 
           // Recover consumer
           notifyBeforeConsumerRecovery(consumer);
-          log.info(queueName == "" ? "Recovering consumer-{}{} via {}"
-              : "Recovering consumer-{} of {} via {}", entry.getKey(), queueName, this);
+          log.info(queueName == "" ? "Recovering consumer-"+ entry.getKey() +" via "+ this
+              : "Recovering consumer-"+ entry.getKey() +" of "+ queueName +" via "+ this);
           consumer.open();
           consumerDeclaration.invoke(delegate);
           notifyAfterConsumerRecovery(consumer);
         } catch (Exception e) {
           ShutdownSignalException sse = Exceptions.extractCause(e, ShutdownSignalException.class);
-          log.error("Failed to recover consumer-{} via {}", entry.getKey(), this, e);
+          log.log(Level.SEVERE, "Failed to recover consumer-"+ entry.getKey() +" via {}"+ this, e);
           notifyConsumerRecoveryFailure(consumer, e);
           if (sse != null) {
             if (!Exceptions.isConnectionClosure(sse))
@@ -448,10 +449,10 @@ public class ChannelHandler extends RetryableResource implements InvocationHandl
       if (queueDeclaration != null) {
         newQueueName = ((Queue.DeclareOk) queueDeclaration.invoke(delegate)).getQueue();
         if (queueName.equals(newQueueName))
-          log.info("Recovered queue {} via {}", queueName, this);
+          log.info("Recovered queue "+ queueName +" via "+ this);
         else {
           // Update dependencies for new queue names
-          log.info("Recovered queue {} as {} via {}", queueName, newQueueName, this);
+          log.info("Recovered queue "+ queueName +" as "+ newQueueName +" via "+ this);
           queueDeclaration.name = newQueueName;
           connectionHandler.queueDeclarations.remove(queueName);
           connectionHandler.queueDeclarations.put(newQueueName, queueDeclaration);
@@ -462,8 +463,7 @@ public class ChannelHandler extends RetryableResource implements InvocationHandl
       if (queueBindings != null)
         synchronized (queueBindings) {
           for (Binding qb : queueBindings) {
-            log.info("Recovering queue binding from {} to {} with {} via {}", qb.source,
-                qb.destination, qb.routingKey, this);
+            log.info("Recovering queue binding from "+ qb.source +" to "+ qb.destination +" with "+ qb.routingKey +" via "+ this);
             delegate.queueBind(qb.destination, qb.source, qb.routingKey, qb.arguments);
           }
         }
@@ -485,7 +485,7 @@ public class ChannelHandler extends RetryableResource implements InvocationHandl
           if (recoveredExchanges.add(exchangeName)) {
             ResourceDeclaration exchangeDeclaration = connectionHandler.exchangeDeclarations.get(exchangeName);
             if (exchangeDeclaration != null) {
-              log.info("Recovering exchange {} via {}", exchangeName, this);
+              log.info("Recovering exchange "+ exchangeName +" via "+ this);
               exchangeDeclaration.invoke(delegate);
             }
 
@@ -493,8 +493,7 @@ public class ChannelHandler extends RetryableResource implements InvocationHandl
             if (exchangeBindings != null)
               synchronized (exchangeBindings) {
                 for (Binding eb : exchangeBindings) {
-                  log.info("Recovering exchange binding from {} to {} with {} via {}", eb.source,
-                      eb.destination, eb.routingKey, this);
+                  log.info("Recovering exchange binding from "+ eb.source +" to "+ eb.destination +" with "+ eb.routingKey +" via "+ this);
                   delegate.exchangeBind(eb.destination, eb.source, eb.routingKey, eb.arguments);
                 }
               }
@@ -510,7 +509,7 @@ public class ChannelHandler extends RetryableResource implements InvocationHandl
   }
 
   private void recoveryFailed(Exception e) {
-    log.error("Failed to recover {}", this, e);
+    log.log(Level.SEVERE, "Failed to recover "+ this, e);
     recoveryComplete();
     interruptWaiters();
     for (ChannelListener listener : config.getChannelListeners())
