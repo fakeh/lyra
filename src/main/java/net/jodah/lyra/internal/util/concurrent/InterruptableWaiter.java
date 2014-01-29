@@ -1,5 +1,7 @@
 package net.jodah.lyra.internal.util.concurrent;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 
 import net.jodah.lyra.util.Duration;
@@ -10,37 +12,33 @@ import net.jodah.lyra.util.Duration;
  * @author Jonathan Halterman
  */
 public class InterruptableWaiter {
-  private final Sync sync = new Sync();
+	private Set<Thread> waitingThreads = new HashSet<Thread>();
 
-  private static final class Sync extends AbstractQueuedSynchronizer {
-    private static final long serialVersionUID = 4016766900138538852L;
-
-    @Override
-    protected int tryAcquireShared(int acquires) {
-      // Disallow acquisition
-      return -1;
-    }
-  }
 
   /**
    * Waits forever, aborting if interrupted.
    */
   public void await() throws InterruptedException {
-    sync.acquireSharedInterruptibly(0);
+    await(Duration.INFINITE);
   }
 
   /**
    * Waits for the {@code waitDuration}, aborting if interrupted.
    */
   public void await(Duration waitDuration) throws InterruptedException {
-    sync.tryAcquireSharedNanos(0, waitDuration.toNanos());
+	  try{
+		  waitingThreads.add(Thread.currentThread());
+		  Thread.sleep(waitDuration.toMilliseconds());
+	  }finally{
+		  waitingThreads.remove(Thread.currentThread());
+	  }
   }
 
   /**
    * Interrupts waiting threads.
    */
   public void interruptWaiters() {
-    for (Thread t : sync.getSharedQueuedThreads())
+    for (Thread t : waitingThreads)
       t.interrupt();
   }
 }

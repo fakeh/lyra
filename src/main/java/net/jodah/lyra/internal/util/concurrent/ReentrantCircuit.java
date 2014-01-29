@@ -1,6 +1,11 @@
 package net.jodah.lyra.internal.util.concurrent;
 
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 import net.jodah.lyra.util.Duration;
 
@@ -8,100 +13,85 @@ import net.jodah.lyra.util.Duration;
  * A circuit that accepts re-entrant {@link #open()}, allows waiting threads to be interrupted, and
  * {@link #close()} calls and ensures fairness when releasing {@link #await() waiting} threads.
  * 
- * @author Jonathan Halterman
+ * @author Daniel McGreal
  */
 public class ReentrantCircuit {
-  private final Sync sync = new Sync();
+	private ReentrantLock lock = new ReentrantLock(true);
+	private Condition open; //null if closed
+	private Set<Thread> waitingThreads = new HashSet<Thread>();
 
-  /**
-   * Synchronization state of 0 = closed, 1 = open.
-   */
-  private static final class Sync extends AbstractQueuedSynchronizer {
-    private static final long serialVersionUID = 992522674231731445L;
+	/**
+	 * Waits for the circuit to be closed, aborting if interrupted.
+	 */
+	public void await() throws InterruptedException {
+		await(Duration.INFINITE);
+	}
 
-    /**
-     * Closes the circuit.
-     */
-    @Override
-    public boolean tryReleaseShared(int ignored) {
-      setState(0);
-      return true;
-    }
+	/**
+	 * Waits for the {@code waitDuration} until the circuit has been closed, aborting if interrupted,
+	 * returning true if the circuit is closed else false.
+	 */
+	public boolean await(Duration waitDuration) throws InterruptedException {
+		lock.lock();
+		try{
+			if(open == null) return true;
+			waitingThreads.add(Thread.currentThread());
+			return open.await(waitDuration.length, waitDuration.timeUnit);
+		}finally{
+			waitingThreads.remove(Thread.currentThread());
+			lock.unlock();
+		}
+	}
 
-    /**
-     * Opens the circuit if not a test.
-     */
-    @Override
-    protected int tryAcquireShared(int acquires) {
-      // Check to make sure the acquisition is not barging in front of a queued thread
-      Thread queuedThread = getFirstQueuedThread();
-      if (queuedThread != null && queuedThread != Thread.currentThread())
-        return -1;
+	/**
+	 * Closes the circuit, releasing any waiting threads.
+	 */
+	public void close() {
+		lock.lock();
+		try{
+			if(open == null) return; //Already closed.
+			open.signalAll();
+			open = null;
+		}finally{
+			lock.unlock();
+		}
+	}
 
-      // If await test
-      if (acquires == 0)
-        return isClosed() ? 1 : -1;
+	/**
+	 * Interrupts waiting threads.
+	 */
+	public void interruptWaiters() {
+		for (Thread t : waitingThreads)
+			t.interrupt();
+	}
 
-      // Explicit open call
-      setState(1);
-      return 1;
-    }
+	/**
+	 * Returns whether the circuit is closed.
+	 */
+	public boolean isClosed() {
+		lock.lock();
+		try{
+			return open == null;
+		}finally{
+			lock.unlock();
+		}
+	}
 
-    private boolean isClosed() {
-      return getState() == 0;
-    }
+	/**
+	 * Opens the circuit.
+	 */
+	public void open() {
+		lock.lock();
+		try{
+			if(open != null) return; //Already open.
+			open = lock.newCondition();
+		}finally{
+			lock.unlock();
+		}
+	}
 
-    private void open() {
-      setState(1);
-    }
-  }
-
-  /**
-   * Waits for the circuit to be closed, aborting if interrupted.
-   */
-  public void await() throws InterruptedException {
-    sync.acquireSharedInterruptibly(0);
-  }
-
-  /**
-   * Waits for the {@code waitDuration} until the circuit has been closed, aborting if interrupted,
-   * returning true if the circuit is closed else false.
-   */
-  public boolean await(Duration waitDuration) throws InterruptedException {
-    return sync.tryAcquireSharedNanos(0, waitDuration.toNanos());
-  }
-
-  /**
-   * Closes the circuit, releasing any waiting threads.
-   */
-  public void close() {
-    sync.releaseShared(1);
-  }
-
-  /**
-   * Interrupts waiting threads.
-   */
-  public void interruptWaiters() {
-    for (Thread t : sync.getSharedQueuedThreads())
-      t.interrupt();
-  }
-
-  /**
-   * Returns whether the circuit is closed.
-   */
-  public boolean isClosed() {
-    return sync.isClosed();
-  }
-
-  /**
-   * Opens the circuit.
-   */
-  public void open() {
-    sync.open();
-  }
-
-  @Override
-  public String toString() {
-    return isClosed() ? "closed" : "open";
-  }
+	@Override
+	public String toString() {
+		return isClosed() ? "closed" : "open";
+	}
 }
