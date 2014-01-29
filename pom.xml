@@ -112,7 +112,9 @@
                 <goal>bundlor</goal>
               </goals>
               <configuration>
-                <manifestTemplate>Bundle-ManifestVersion: 2</manifestTemplate>
+                <manifestTemplate>
+Bundle-ManifestVersion: 2
+Excluded-Exports: net.jodah.lyra.internal</manifestTemplate>
               </configuration>
             </execution>
           </executions>
