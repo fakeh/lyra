@@ -148,4 +148,15 @@ public abstract class RecurringPolicy<T extends RecurringPolicy<T>> {
     this.maxDuration = maxDuration;
     return (T) this;
   }
+
+@Override
+public String toString() {
+	return "RecurringPolicy [allowsAttempts()=" + allowsAttempts()
+			+ ", getInterval()=" + getInterval() + ", getIntervalMultiplier()="
+			+ getIntervalMultiplier() + ", getMaxAttempts()="
+			+ getMaxAttempts() + ", getMaxDuration()=" + getMaxDuration()
+			+ ", getMaxInterval()=" + getMaxInterval() + "]";
+}
+  
+  
 }

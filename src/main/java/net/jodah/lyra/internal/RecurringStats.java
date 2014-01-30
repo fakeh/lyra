@@ -93,4 +93,17 @@ public final class RecurringStats {
     boolean withinMaxDuration = maxDuration == -1 || System.nanoTime() - startTime < maxDuration;
     return !withinMaxRetries || !withinMaxDuration;
   }
+
+@Override
+public String toString() {
+	return "RecurringStats [maxAttempts=" + maxAttempts + ", maxDuration="
+			+ maxDuration + ", interval=" + interval + ", startTime="
+			+ startTime + ", intervalMultiplier=" + intervalMultiplier
+			+ ", maxInterval=" + maxInterval + ", attemptCount=" + attemptCount
+			+ ", getMaxWaitTime()=" + getMaxWaitTime() + ", getWaitTime()="
+			+ getWaitTime() + ", isPolicyExceeded()=" + isPolicyExceeded()
+			+ "]";
+}
+  
+   
 }
