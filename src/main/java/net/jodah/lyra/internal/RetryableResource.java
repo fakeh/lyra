@@ -48,8 +48,13 @@ abstract class RetryableResource {
             && recurringPolicy.allowsAttempts())
             log.log(Level.SEVERE, "Invocation of "+ callable +" failed.", e);
 
-        if (sse != null && (recovery || !recoverable))
-          throw e;
+        if (sse != null && (recovery || !recoverable)){
+        	 if(sse.getCause() == null){
+        		 //DJM, only exit here if there is no cause 
+        		log.log(Level.SEVERE, "Rethrowing, as not recoverable: "+ recovery +", "+ recoverable, e);
+        		throw e;
+        	}
+        }
 
         if (!closed) {
           try {
@@ -79,12 +84,18 @@ abstract class RetryableResource {
                 if (remainingWaitTime > 0)
                   retryWaiter.await(Duration.nanos(remainingWaitTime));
                 continue;
+              } else {
+            	  log.log(Level.FINE, "Policy is exceeded: "+ retryStats, e);
               }
+            } else {
+            	log.log(Level.FINE, "Not retryable: "+ recurringPolicy, e);
             }
           } catch (Throwable ignore) {
+        	  log.log(Level.SEVERE, "Throwable thrown, but ignored", ignore);
           }
         }
 
+        log.log(Level.INFO, "No more retry attempts for "+ this +", because the resource is closed or is not retryable");
         throw e;
       }
     }
