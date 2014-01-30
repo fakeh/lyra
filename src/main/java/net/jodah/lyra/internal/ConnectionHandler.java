@@ -258,12 +258,16 @@ public class ConnectionHandler extends RetryableResource implements InvocationHa
 		recoverExchangesAndQueues();
 
 		// Recover channels
-		for (ChannelHandler channelHandler : channels.values())
-			if (channelHandler.canRecover())
-				channelHandler.recoverChannel(true);
+		try{
+			for (ChannelHandler channelHandler : channels.values())
+				if (channelHandler.canRecover()){
+					channelHandler.recoverChannel(true);
+				}
+		}catch(Exception ignored){}
 
 		for (ConnectionListener listener : config.getConnectionListeners())
 			try {
+				if( ! delegate.isOpen()) break; 
 				listener.onChannelRecovery(proxy);
 			} catch (Exception ignore) {
 			}
@@ -293,7 +297,7 @@ public class ConnectionHandler extends RetryableResource implements InvocationHa
 				try {
 					if (channel != null)
 						channel.close();
-				} catch (IOException ignore) {
+				} catch (Exception ignore) {
 				}
 			}
 		}
