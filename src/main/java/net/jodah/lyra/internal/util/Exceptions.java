@@ -2,6 +2,7 @@ package net.jodah.lyra.internal.util;
 
 import java.io.EOFException;
 import java.net.ConnectException;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
 
 import com.rabbitmq.client.AMQP;
@@ -37,8 +38,14 @@ public final class Exceptions {
   }
 
   public static boolean isRetryable(Exception e, ShutdownSignalException sse) {
-    if (e instanceof SocketTimeoutException || e instanceof ConnectException
-        || e instanceof AlreadyClosedException || e.getCause() instanceof EOFException)
+	  //DJM I had a case where IOException wrapped ShutdownSignalException wrapped EOFException
+	//DJM I had an IOE(SSE(SocketException)) (java.net.SocketException: Connection reset), I don't know why it wasn't a ConnectionException
+	  //DJM seems safer to check for all of these given that sometimes they're wrapped in IOE(SSE(...)) for some reason.
+    if (extractCause(e, SocketTimeoutException.class) != null 
+    		|| extractCause(e, ConnectException.class) != null
+    		|| extractCause(e, AlreadyClosedException.class) != null
+    		|| extractCause(e, EOFException.class) != null 
+    		|| extractCause(e, SocketException.class) != null) 
       return true;
     if (e instanceof PossibleAuthenticationFailureException)
       return false;
