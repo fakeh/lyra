@@ -65,7 +65,7 @@ abstract class RetryableResource {
 
             if (retryable) {
               // Wait for pending recovery
-              if (sse != null) {
+              if (sse != null && sse.getCause() == null) {
                 if (recurringPolicy.getMaxDuration() == null)
                   circuit.await();
                 else if (!circuit.await(retryStats.getMaxWaitTime())) {
