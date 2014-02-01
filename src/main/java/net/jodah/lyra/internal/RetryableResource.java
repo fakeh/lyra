@@ -2,6 +2,7 @@ package net.jodah.lyra.internal;
 
 import static net.jodah.lyra.internal.util.Exceptions.*;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -9,11 +10,14 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import net.jodah.lyra.internal.util.Collections;
+import net.jodah.lyra.internal.util.Exceptions;
 import net.jodah.lyra.internal.util.Reflection;
 import net.jodah.lyra.internal.util.concurrent.InterruptableWaiter;
 import net.jodah.lyra.internal.util.concurrent.ReentrantCircuit;
 import net.jodah.lyra.util.Duration;
 
+import com.rabbitmq.client.AMQP.Queue;
+import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.ShutdownListener;
 import com.rabbitmq.client.ShutdownSignalException;
 
@@ -48,13 +52,8 @@ abstract class RetryableResource {
             && recurringPolicy.allowsAttempts())
             log.log(Level.SEVERE, "Invocation of "+ callable +" failed.", e);
 
-        if (sse != null && (recovery || !recoverable)){
-        	 if(sse.getCause() == null){
-        		 //DJM, only exit here if there is no cause 
-        		log.log(Level.SEVERE, "Rethrowing, as not recoverable: "+ recovery +", "+ recoverable, e);
-        		throw e;
-        	}
-        }
+        if (sse != null && (recovery || !recoverable))
+          throw e;
 
         if (!closed) {
           try {
@@ -65,7 +64,7 @@ abstract class RetryableResource {
 
             if (retryable) {
               // Wait for pending recovery
-              if (sse != null && sse.getCause() == null) {
+              if (sse != null) {
                 if (recurringPolicy.getMaxDuration() == null)
                   circuit.await();
                 else if (!circuit.await(retryStats.getMaxWaitTime())) {
@@ -124,5 +123,82 @@ abstract class RetryableResource {
   void interruptWaiters() {
     circuit.interruptWaiters();
     retryWaiter.interruptWaiters();
+  }
+
+  /** Returns the channel to use for recovery. */
+  abstract Channel getRecoveryChannel() throws IOException;
+
+  /** Whether a failure on recovery should always result in a throw. */
+  abstract boolean throwOnRecoveryFailure();
+
+  /** Recovers an exchange using the {@code channelSupplier}. */
+  void recoverExchange(String exchangeName, ResourceDeclaration exchangeDeclaration)
+      throws Exception {
+    try {
+      log.info("Recovering exchange "+ exchangeName +" via "+ this);
+      exchangeDeclaration.invoke(getRecoveryChannel());
+    } catch (Exception e) {
+      log.log(Level.SEVERE, "Failed to recover exchange "+ exchangeName +" via "+ this, e);
+      if (throwOnRecoveryFailure() || Exceptions.isCausedByConnectionClosure(e))
+        throw e;
+    }
+  }
+
+  /** Recover exchange bindings using the {@code channelSupplier}. */
+  void recoverExchangeBindings(Iterable<Binding> exchangeBindings) throws Exception {
+    if (exchangeBindings != null)
+      synchronized (exchangeBindings) {
+        for (Binding binding : exchangeBindings)
+          try {
+            log.info("Recovering exchange binding from "+ binding.source +" to "+ 
+            		binding.destination +" with "+ binding.routingKey +" via "+ this);
+            getRecoveryChannel().exchangeBind(binding.destination, binding.source,
+                binding.routingKey, binding.arguments);
+          } catch (Exception e) {
+            log.log(Level.SEVERE, "Failed to recover exchange binding from "+ binding.source +" to "+ 
+            		binding.destination +" with "+ binding.routingKey +" via "+ this, e);
+            if (throwOnRecoveryFailure() || Exceptions.isCausedByConnectionClosure(e))
+              throw e;
+          }
+      }
+  }
+
+  /** Recovers a queue using the {@code channelSupplier}, returning the recovered queue's name. */
+  String recoverQueue(String queueName, QueueDeclaration queueDeclaration) throws Exception {
+    try {
+      String newQueueName = ((Queue.DeclareOk) queueDeclaration.invoke(getRecoveryChannel())).getQueue();
+      if (queueName.equals(newQueueName))
+        log.info("Recovered queue "+ queueName +" via "+ this);
+      else {
+        log.info("Recovered queue "+ queueName +" as "+ newQueueName +" via "+ this);
+        queueDeclaration.name = newQueueName;
+      }
+
+      return newQueueName;
+    } catch (Exception e) {
+      log.log(Level.SEVERE, "Failed to recover queue "+ queueName +" via "+ this, e);
+      if (throwOnRecoveryFailure() || Exceptions.isCausedByConnectionClosure(e))
+        throw e;
+      return queueName;
+    }
+  }
+
+  /** Recovers queue bindings using the {@code channelSupplier}. */
+  void recoverQueueBindings(Iterable<Binding> queueBindings) throws Exception {
+    if (queueBindings != null)
+      synchronized (queueBindings) {
+        for (Binding binding : queueBindings)
+          try {
+            log.info("Recovering queue binding from "+ binding.source +" to "+ 
+            		binding.destination +" with "+ binding.routingKey +" via "+ this);
+            getRecoveryChannel().queueBind(binding.destination, binding.source, binding.routingKey,
+                binding.arguments);
+          } catch (Exception e) {
+            log.log(Level.SEVERE, "Failed to recover queue binding from "+ binding.source +" to "+ 
+            		binding.destination +" with "+ binding.routingKey +" via "+ this, e);
+            if (throwOnRecoveryFailure() || Exceptions.isCausedByConnectionClosure(e))
+              throw e;
+          }
+      }
   }
 }
