@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -228,7 +229,7 @@ public class ConnectionHandler extends RetryableResource implements InvocationHa
       delegate = callWithRetries(new Callable<Connection>() {
         @Override
         public Connection call() throws IOException {
-			log.info((recovery ? "Recovering" : "Creating") +" connection "+ connectionName +" to "+ options.getAddresses());
+			log.info((recovery ? "Recovering" : "Creating") +" connection "+ connectionName +" to "+ Arrays.asList(options.getAddresses()));
           ConnectionFactory cxnFactory = options.getConnectionFactory();
           Connection connection = cxnFactory.newConnection(consumerThreadPool,
               options.getAddresses());
