@@ -129,10 +129,10 @@ abstract class RetryableResource {
   void recoverExchange(String exchangeName, ResourceDeclaration exchangeDeclaration)
       throws Exception {
     try {
-      log.info("Recovering exchange {} via {}", exchangeName, this);
+      log.info("Recovering exchange "+ exchangeName +" via "+ this);
       exchangeDeclaration.invoke(getRecoveryChannel());
     } catch (Exception e) {
-      log.error("Failed to recover exchange {} via {}", exchangeName, this, e);
+      log.log(Level.SEVERE, "Failed to recover exchange "+ exchangeName +" via "+ this, e);
       if (throwOnRecoveryFailure() || Exceptions.isCausedByConnectionClosure(e))
         throw e;
     }
@@ -144,13 +144,13 @@ abstract class RetryableResource {
       synchronized (exchangeBindings) {
         for (Binding binding : exchangeBindings)
           try {
-            log.info("Recovering exchange binding from {} to {} with {} via {}", binding.source,
-                binding.destination, binding.routingKey, this);
+            log.info("Recovering exchange binding from "+ binding.source +" to "+ binding.destination 
+            		+" with "+ binding.routingKey +" via "+ this);
             getRecoveryChannel().exchangeBind(binding.destination, binding.source,
                 binding.routingKey, binding.arguments);
           } catch (Exception e) {
-            log.error("Failed to recover exchange binding from {} to {} with {} via {}",
-                binding.source, binding.destination, binding.routingKey, this, e);
+            log.log(Level.SEVERE, "Failed to recover exchange binding from "+ binding.source +" to "+ binding.destination 
+            		+" with "+ binding.routingKey +" via "+ this, e);
             if (throwOnRecoveryFailure() || Exceptions.isCausedByConnectionClosure(e))
               throw e;
           }
@@ -162,15 +162,15 @@ abstract class RetryableResource {
     try {
       String newQueueName = ((Queue.DeclareOk) queueDeclaration.invoke(getRecoveryChannel())).getQueue();
       if (queueName.equals(newQueueName))
-        log.info("Recovered queue {} via {}", queueName, this);
+        log.info("Recovered queue "+ queueName +" via "+ this);
       else {
-        log.info("Recovered queue {} as {} via {}", queueName, newQueueName, this);
+        log.info("Recovered queue "+ queueName +" as "+ newQueueName +" via "+ this);
         queueDeclaration.name = newQueueName;
       }
 
       return newQueueName;
     } catch (Exception e) {
-      log.error("Failed to recover queue {} via {}", queueName, this, e);
+      log.log(Level.SEVERE, "Failed to recover queue "+ queueName +" via "+ this, e);
       if (throwOnRecoveryFailure() || Exceptions.isCausedByConnectionClosure(e))
         throw e;
       return queueName;
@@ -183,13 +183,13 @@ abstract class RetryableResource {
       synchronized (queueBindings) {
         for (Binding binding : queueBindings)
           try {
-            log.info("Recovering queue binding from {} to {} with {} via {}", binding.source,
-                binding.destination, binding.routingKey, this);
+            log.info("Recovering queue binding from "+ binding.source +" to "+ binding.destination 
+            		+" with "+ binding.routingKey +" via "+ this);
             getRecoveryChannel().queueBind(binding.destination, binding.source, binding.routingKey,
                 binding.arguments);
           } catch (Exception e) {
-            log.error("Failed to recover queue binding from {} to {} with {} via {}",
-                binding.source, binding.destination, binding.routingKey, this, e);
+            log.log(Level.SEVERE, "Failed to recover queue binding from "+ binding.source +" to "+ binding.destination 
+            		+" with "+ binding.routingKey +" via "+ this, e);
             if (throwOnRecoveryFailure() || Exceptions.isCausedByConnectionClosure(e))
               throw e;
           }
