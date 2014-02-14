@@ -84,10 +84,11 @@ abstract class RetryableResource {
                   retryWaiter.await(Duration.nanos(remainingWaitTime));
                 continue;
               }
-            }
+            } else log.log(Level.INFO, "No more retries for "+ this +" because the cause is not retryable with policy "+ recurringPolicy, e);
           } catch (Throwable ignore) {
+        	  log.log(Level.WARNING, "Ignored throwable", ignore);
           }
-        }
+        } else log.info("No more retries for "+ this +" because the resource is closed.");
 
         throw e;
       }
