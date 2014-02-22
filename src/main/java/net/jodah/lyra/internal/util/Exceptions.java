@@ -1,6 +1,7 @@
 package net.jodah.lyra.internal.util;
 
 import java.io.EOFException;
+import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 
@@ -42,7 +43,7 @@ public final class Exceptions {
   }
 
   public static boolean isRetryable(Exception e, ShutdownSignalException sse) {
-    if (e instanceof SocketTimeoutException || e instanceof ConnectException
+    if (e instanceof IOException //SocketTimeoutException || e instanceof ConnectException
         || e instanceof AlreadyClosedException || e.getCause() instanceof EOFException)
       return true;
     if (e instanceof PossibleAuthenticationFailureException)
